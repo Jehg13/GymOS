@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../data/database.dart';
 import '../data/routine_store.dart';
 
 void main() {
@@ -479,6 +481,43 @@ class _WeeklySplitScreenState extends State<WeeklySplitScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadSchedule();
+  }
+
+  Future<void> _loadSchedule() async {
+    final saved = await GymDatabase.instance.readCollection('planner');
+    if (!mounted || saved.isEmpty) return;
+    setState(() {
+      _schedule
+        ..clear()
+        ..addAll(
+          saved.map(
+            (item) => WeeklySplitItem(
+              day: item['day'] as String,
+              title: item['title'] as String,
+              isRest: item['isRest'] as bool? ?? false,
+            ),
+          ),
+        );
+    });
+  }
+
+  Future<void> _saveSchedule() => GymDatabase.instance.writeCollection(
+    'planner',
+    _schedule
+        .map(
+          (item) => {
+            'day': item.day,
+            'title': item.title,
+            'isRest': item.isRest,
+          },
+        )
+        .toList(),
+  );
+
+  @override
   Widget build(BuildContext context) {
     final routines = RoutineStore.instance.routines;
     final schedule = _schedule.map((item) {
@@ -516,6 +555,7 @@ class _WeeklySplitScreenState extends State<WeeklySplitScreen> {
                   if (newIndex > oldIndex) newIndex -= 1;
                   final item = _schedule.removeAt(oldIndex);
                   _schedule.insert(newIndex, item);
+                  _saveSchedule();
                 });
               },
               proxyDecorator: (child, index, animation) => child,

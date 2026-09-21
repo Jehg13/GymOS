@@ -6,10 +6,12 @@ import 'screens/gymos_auth_flow.dart';
 import 'screens/gymos_dashboard.dart';
 import 'screens/gymos_onboarding.dart';
 import 'screens/splash_screen.dart';
+import 'data/routine_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GymDatabase.instance.initialize();
+  await RoutineStore.instance.initialize();
   await AppPreferences.instance.initialize();
   runApp(const GymOsApp());
 }
@@ -57,7 +59,10 @@ class GymOsApp extends StatelessWidget {
             height: 1.4,
           ),
           alignment: Alignment.center,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 22,
+            vertical: 24,
+          ),
         ),
         bottomSheetTheme: const BottomSheetThemeData(
           backgroundColor: Color(0xFF11151D),

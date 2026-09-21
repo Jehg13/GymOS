@@ -54,6 +54,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   int _currentExercise = 0;
   int _elapsedSeconds = 0;
   Timer? _elapsedTimer;
+  final Map<String, Map<String, dynamic>> _exerciseStats = {};
 
   // Estado de las series
   final List<Map<String, dynamic>> _sets = [
@@ -126,6 +127,34 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
             },
           ),
         );
+    } else if (widget.routine?['exerciseNames'] is List &&
+        (widget.routine!['exerciseNames'] as List).isNotEmpty) {
+      _exerciseNames = (widget.routine!['exerciseNames'] as List)
+          .map((name) => name.toString())
+          .toList();
+      final count = (widget.routine?['setsPerExercise'] as int?) ?? 3;
+      final repsText = (widget.routine?['repRange'] as String?) ?? '8-12';
+      final reps = int.tryParse(repsText.split('-').first) ?? 8;
+      final weight =
+          double.tryParse(
+            '${widget.routine?['recommendedWeight']}'.split(' ').first,
+          ) ??
+          0;
+      _sets
+        ..clear()
+        ..addAll(
+          List.generate(
+            count,
+            (index) => {
+              'setNumber': index + 1,
+              'prev': 'Sin registro',
+              'weight': weight,
+              'reps': reps,
+              'rir': 1,
+              'completed': false,
+            },
+          ),
+        );
     } else {
       _exerciseNames = ['Press banca'];
     }
@@ -179,6 +208,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       widget.routine?['title'] as String? ?? 'Entrenamiento libre';
 
   void _nextExercise() {
+    _saveCurrentExerciseStats();
     if (_currentExercise >= _exerciseNames.length - 1) {
       _finishWorkout();
       return;
@@ -187,6 +217,23 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       _currentExercise++;
       _loadExerciseSets();
     });
+  }
+
+  void _saveCurrentExerciseStats() {
+    final completedSets = _sets.where((set) => set['completed'] == true);
+    final weight = completedSets
+        .map((set) => (set['weight'] as num?)?.toDouble() ?? 0)
+        .fold<double>(0, (max, value) => value > max ? value : max);
+    final reps = completedSets
+        .map((set) => (set['reps'] as num?)?.toInt() ?? 0)
+        .fold<int>(0, (max, value) => value > max ? value : max);
+    if (weight > 0 && reps > 0) {
+      _exerciseStats[_exerciseNames[_currentExercise]] = {
+        'name': _exerciseNames[_currentExercise],
+        'weight': weight,
+        'reps': reps,
+      };
+    }
   }
 
   void _loadExerciseSets() {
@@ -217,6 +264,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   }
 
   Future<void> _finishWorkout() async {
+    _saveCurrentExerciseStats();
     _stopRestTimer();
     final duration = _elapsedSeconds ~/ 60;
     if (!mounted) return;
@@ -256,13 +304,11 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
         'duration': duration,
         'volume': _sessionVolume,
         'muscleGroups': widget.routine?['muscleGroups'] ?? const <String>[],
-        'date': _formatDate(DateTime.now()),
+        'date': DateTime.now().toIso8601String(),
+        'exerciseStats': _exerciseStats.values.toList(),
       });
     }
   }
-
-  String _formatDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
   @override
   void dispose() {

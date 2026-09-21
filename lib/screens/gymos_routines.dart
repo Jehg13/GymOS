@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/exercise_catalog.dart';
 import '../data/routine_store.dart';
 
 void main() {
@@ -796,6 +797,32 @@ class _CreateRoutineSheetState extends State<_CreateRoutineSheet> {
     ),
   ];
 
+  List<_ExerciseGuide> get _allExercises => [
+    ..._exercises,
+    ...ExerciseCatalog.all
+        .where(
+          (item) =>
+              !_exercises.any((exercise) => exercise.name == item['name']),
+        )
+        .map(
+          (item) => _ExerciseGuide(
+            name: item['name']!,
+            muscle: item['muscle']!,
+            equipment: item['equipment']!,
+            difficulty: item['difficulty']!,
+            explanation:
+                'Ejercicio de ${item['muscle']!.toLowerCase()} para complementar tu plan.',
+            steps: const [
+              'Adopta una postura estable y prepara el movimiento.',
+              'Ejecuta cada repetición con control y rango cómodo.',
+              'Regresa lentamente y mantén una respiración constante.',
+            ],
+            tips: 'Prioriza la técnica y aumenta la carga gradualmente.',
+            icon: Icons.fitness_center_rounded,
+          ),
+        ),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -951,6 +978,8 @@ class _CreateRoutineSheetState extends State<_CreateRoutineSheet> {
                       'Tríceps',
                       'Glúteos',
                       'Core',
+                      'Antebrazo',
+                      'Pantorrillas',
                     ].map((muscle) {
                       final selected = _muscleFilter == muscle;
                       return Padding(
@@ -990,7 +1019,7 @@ class _CreateRoutineSheetState extends State<_CreateRoutineSheet> {
               ],
             ),
             const SizedBox(height: 8),
-            ..._exercises
+            ..._allExercises
                 .where(
                   (exercise) =>
                       _muscleFilter == 'Todos' ||

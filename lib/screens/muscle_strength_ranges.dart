@@ -15,6 +15,8 @@ class MuscleStrengthRangesScreen extends StatelessWidget {
     'Tríceps': 30,
     'Glúteos': 100,
     'Core': 35,
+    'Antebrazo': 25,
+    'Pantorrillas': 80,
   };
 
   @override

@@ -128,6 +128,23 @@ class RecoveryScreen extends StatelessWidget {
   }
 
   Widget _buildRestDayCard() {
+    final history = RoutineStore.instance.workoutHistory;
+    final recentSessions = history.where((session) {
+      final date = DateTime.tryParse(session['date']?.toString() ?? '');
+      return date != null &&
+          date.isAfter(DateTime.now().subtract(const Duration(days: 7)));
+    }).length;
+    final shouldRest = recentSessions >= 4;
+    final day = DateTime.now().add(Duration(days: shouldRest ? 1 : 2));
+    const weekdays = [
+      'LUNES',
+      'MARTES',
+      'MIÉRCOLES',
+      'JUEVES',
+      'VIERNES',
+      'SÁBADO',
+      'DOMINGO',
+    ];
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -142,8 +159,8 @@ class RecoveryScreen extends StatelessWidget {
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 'PRÓXIMO DÍA DE DESCANSO',
                 style: TextStyle(
                   color: GymOSTheme.textSecondary,
@@ -154,7 +171,7 @@ class RecoveryScreen extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                'DOMINGO',
+                weekdays[day.weekday - 1],
                 style: TextStyle(
                   color: GymOSTheme.textPrimary,
                   fontSize: 22,
@@ -170,8 +187,8 @@ class RecoveryScreen extends StatelessWidget {
               color: GymOSTheme.statusNormal.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text(
-              'RENOVACIÓN FÍSICA',
+            child: Text(
+              shouldRest ? 'DESCANSO SUGERIDO' : 'RECUPERACIÓN ACTIVA',
               style: TextStyle(
                 color: GymOSTheme.statusNormal,
                 fontSize: 10,
@@ -212,42 +229,40 @@ class RecoveryScreen extends StatelessWidget {
         ),
       );
     }
-    final List<Map<String, dynamic>> muscleMap = [
-      {
-        'muscle': 'PECHO',
-        'lastTrained': '16 septiembre',
-        'status': 'Reciente',
-        'color': GymOSTheme.statusReciente,
-      },
-      {
-        'muscle': 'ESPALDA',
-        'lastTrained': '15 septiembre',
-        'status': 'Normal',
-        'color': GymOSTheme.statusNormal,
-      },
-      {
-        'muscle': 'PIERNAS',
-        'lastTrained': '14 septiembre',
-        'status': 'Descanso',
-        'color': GymOSTheme.statusDescanso,
-      },
-      {
-        'muscle': 'HOMBROS',
-        'lastTrained': '16 septiembre',
-        'status': 'Reciente',
-        'color': GymOSTheme.statusReciente,
-      },
-      {
-        'muscle': 'BRAZOS',
-        'lastTrained': '16 septiembre',
-        'status': 'Reciente',
-        'color': GymOSTheme.statusReciente,
-      },
-    ];
+    final latestByMuscle = <String, DateTime>{};
+    for (final session in RoutineStore.instance.workoutHistory) {
+      final date = DateTime.tryParse(session['date']?.toString() ?? '');
+      if (date == null) continue;
+      for (final group in (session['muscleGroups'] as List? ?? const [])) {
+        final muscle = group.toString().toUpperCase();
+        if (!latestByMuscle.containsKey(muscle) ||
+            date.isAfter(latestByMuscle[muscle]!)) {
+          latestByMuscle[muscle] = date;
+        }
+      }
+    }
+    final muscleMap = latestByMuscle.entries.map((entry) {
+      final days = DateTime.now().difference(entry.value).inDays;
+      final status = days <= 1
+          ? 'Reciente'
+          : days <= 3
+          ? 'Normal'
+          : 'Descanso';
+      return {
+        'muscle': entry.key,
+        'lastTrained': '${entry.value.day}/${entry.value.month}',
+        'status': status,
+        'color': status == 'Reciente'
+            ? GymOSTheme.statusReciente
+            : status == 'Normal'
+            ? GymOSTheme.statusNormal
+            : GymOSTheme.statusDescanso,
+      };
+    }).toList();
 
     return Column(
       children: muscleMap.map((item) {
-        final Color statusColor = item['color'];
+        final statusColor = item['color'] as Color;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -275,7 +290,7 @@ class RecoveryScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item['muscle'],
+                        item['muscle'].toString(),
                         style: const TextStyle(
                           color: GymOSTheme.textPrimary,
                           fontSize: 14,
@@ -322,15 +337,27 @@ class RecoveryScreen extends StatelessWidget {
   }
 
   Widget _buildRecoveryCalendar() {
-    final List<Map<String, dynamic>> days = [
-      {'day': 'L', 'date': '14', 'color': GymOSTheme.statusDescanso},
-      {'day': 'M', 'date': '15', 'color': GymOSTheme.statusNormal},
-      {'day': 'M', 'date': '16', 'color': GymOSTheme.statusReciente},
-      {'day': 'J', 'date': '17', 'color': GymOSTheme.statusNormal},
-      {'day': 'V', 'date': '18', 'color': GymOSTheme.statusReciente},
-      {'day': 'S', 'date': '19', 'color': GymOSTheme.statusNormal},
-      {'day': 'D', 'date': '20', 'color': GymOSTheme.statusDescanso},
-    ];
+    const labels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    final today = DateTime.now();
+    final days = List.generate(7, (index) {
+      final date = today.subtract(Duration(days: 6 - index));
+      final trained = RoutineStore.instance.workoutHistory.any((session) {
+        final sessionDate = DateTime.tryParse(
+          session['date']?.toString() ?? '',
+        );
+        return sessionDate != null &&
+            sessionDate.year == date.year &&
+            sessionDate.month == date.month &&
+            sessionDate.day == date.day;
+      });
+      return {
+        'day': labels[date.weekday - 1],
+        'date': '${date.day}',
+        'color': trained
+            ? GymOSTheme.statusReciente
+            : GymOSTheme.statusDescanso,
+      };
+    });
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -346,7 +373,7 @@ class RecoveryScreen extends StatelessWidget {
           return Column(
             children: [
               Text(
-                d['day']!,
+                d['day'].toString(),
                 style: const TextStyle(
                   color: GymOSTheme.textSecondary,
                   fontSize: 11,

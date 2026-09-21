@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../data/progress_analytics.dart';
 import '../data/routine_store.dart';
 import 'gymos_achievements.dart';
 import 'gymos_body_evolution.dart';
@@ -56,6 +57,292 @@ class ProgressScreen extends StatefulWidget {
 class _ProgressScreenState extends State<ProgressScreen> {
   String _selectedTimeframe = 'Mes';
   final List<String> _timeframes = ['Semana', 'Mes', '3 meses', 'Año', 'Todo'];
+
+  Widget _buildPerformanceAnalysis(
+    List<Map<String, dynamic>> history,
+    Map<String, double> volumeByMuscle,
+  ) {
+    final records = ProgressAnalytics.personalRecords(history);
+    final consistency = ProgressAnalytics.consistency(history);
+    final average = ProgressAnalytics.movingAverage(history);
+    final insights = ProgressAnalytics.balanceInsights(volumeByMuscle);
+    final currentVolume = history
+        .where((session) {
+          final date = ProgressAnalytics.dateOf(session);
+          return date != null &&
+              date.isAfter(DateTime.now().subtract(const Duration(days: 30)));
+        })
+        .fold<double>(
+          0,
+          (sum, session) =>
+              sum + ((session['volume'] as num?)?.toDouble() ?? 0),
+        );
+    final previousVolume = history
+        .where((session) {
+          final date = ProgressAnalytics.dateOf(session);
+          final now = DateTime.now();
+          return date != null &&
+              date.isBefore(now.subtract(const Duration(days: 30))) &&
+              date.isAfter(now.subtract(const Duration(days: 60)));
+        })
+        .fold<double>(
+          0,
+          (sum, session) =>
+              sum + ((session['volume'] as num?)?.toDouble() ?? 0),
+        );
+    final change = previousVolume == 0
+        ? 0
+        : ((currentVolume - previousVolume) / previousVolume) * 100;
+    final bodyWeight = RoutineStore.instance.bodyLogs.isEmpty
+        ? null
+        : (RoutineStore.instance.bodyLogs.first['weight'] as num?)?.toDouble();
+    final best = records.isEmpty ? null : records.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ANÁLISIS DE RENDIMIENTO',
+          style: TextStyle(
+            color: GymOSTheme.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: GymOSTheme.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: GymOSTheme.cyanElectric.withValues(alpha: .2),
+            ),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _AnalysisMetric(
+                      label: 'MEJOR 1RM',
+                      value: best == null
+                          ? '--'
+                          : '${(best['oneRm'] as double).toStringAsFixed(1)} kg',
+                      caption: best?['name'] as String? ?? 'Sin registros',
+                      color: GymOSTheme.orangeElectric,
+                    ),
+                  ),
+                  Expanded(
+                    child: _AnalysisMetric(
+                      label: 'MEDIA 7 DÍAS',
+                      value: '${average.toStringAsFixed(0)} kg',
+                      caption: 'volumen diario',
+                      color: GymOSTheme.cyanElectric,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 26, color: GymOSTheme.surfaceElevated),
+              Row(
+                children: [
+                  Expanded(
+                    child: _AnalysisMetric(
+                      label: 'CAMBIO MENSUAL',
+                      value:
+                          '${change >= 0 ? '+' : ''}${change.toStringAsFixed(0)}%',
+                      caption: 'volumen vs. mes anterior',
+                      color: change >= 0
+                          ? const Color(0xFF36D399)
+                          : const Color(0xFFFF7A8A),
+                    ),
+                  ),
+                  Expanded(
+                    child: _AnalysisMetric(
+                      label: 'PESO CORPORAL',
+                      value: bodyWeight == null
+                          ? '--'
+                          : '${bodyWeight.toStringAsFixed(1)} kg',
+                      caption: 'último registro',
+                      color: GymOSTheme.violetElectric,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _AnalysisAlert(
+                icon: consistency['low'] as bool
+                    ? Icons.warning_amber_rounded
+                    : Icons.check_circle_rounded,
+                color: consistency['low'] as bool
+                    ? const Color(0xFFFFB347)
+                    : const Color(0xFF36D399),
+                text: consistency['low'] as bool
+                    ? 'Baja consistencia: llevas ${consistency['daysSince']} días sin una sesión reciente.'
+                    : '${consistency['completed']} de 7 días activos esta semana. Mantén el ritmo.',
+              ),
+              const SizedBox(height: 10),
+              ...insights.map(
+                (insight) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _AnalysisAlert(
+                    icon: Icons.balance_rounded,
+                    color: GymOSTheme.violetElectric,
+                    text: insight,
+                  ),
+                ),
+              ),
+              if (records.isEmpty)
+                const _AnalysisAlert(
+                  icon: Icons.info_outline_rounded,
+                  color: GymOSTheme.textSecondary,
+                  text: 'Completa series con peso para calcular récords y 1RM.',
+                )
+              else if (records.length == 1)
+                const _AnalysisAlert(
+                  icon: Icons.trending_flat_rounded,
+                  color: GymOSTheme.cyanElectric,
+                  text:
+                      'Aún hay pocos datos para detectar estancamientos con precisión.',
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildMuscleVolumeCard(volumeByMuscle),
+        if (records.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _buildRecordsCard(records),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMuscleVolumeCard(Map<String, double> volume) {
+    final entries = volume.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return _analysisCard(
+      title: 'VOLUMEN POR MÚSCULO',
+      child: entries.isEmpty
+          ? const Text(
+              'Todavía no hay volumen distribuido por músculo.',
+              style: TextStyle(color: GymOSTheme.textSecondary, fontSize: 12),
+            )
+          : Column(
+              children: entries.take(6).map((entry) {
+                final max = entries.first.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 78,
+                        child: Text(
+                          entry.key,
+                          style: const TextStyle(
+                            color: GymOSTheme.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: LinearProgressIndicator(
+                            value: max == 0 ? 0 : entry.value / max,
+                            minHeight: 7,
+                            backgroundColor: GymOSTheme.surfaceElevated,
+                            valueColor: const AlwaysStoppedAnimation(
+                              GymOSTheme.violetElectric,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Text(
+                        '${entry.value.toStringAsFixed(0)} kg',
+                        style: const TextStyle(
+                          color: GymOSTheme.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+    );
+  }
+
+  Widget _buildRecordsCard(List<Map<String, dynamic>> records) {
+    return _analysisCard(
+      title: 'RÉCORDS PERSONALES · 1RM ESTIMADO',
+      child: Column(
+        children: records.take(5).map((record) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.emoji_events_rounded,
+                  color: GymOSTheme.orangeElectric,
+                  size: 18,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    '${record['name']} · ${record['weight']} kg × ${record['reps']}',
+                    style: const TextStyle(
+                      color: GymOSTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${(record['oneRm'] as double).toStringAsFixed(1)} kg',
+                  style: const TextStyle(
+                    color: GymOSTheme.orangeElectric,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _analysisCard({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: GymOSTheme.surfaceBase,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: .05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: GymOSTheme.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
 
   Widget _buildProgressHero(int sessions, int minutes, int sets) {
     final completion = (sessions / 5).clamp(0.0, 1.0);
@@ -300,6 +587,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
       'Tríceps',
       'Glúteos',
       'Core',
+      'Antebrazo',
+      'Pantorrillas',
     ];
     final sorted = [...groups]
       ..sort((a, b) => (muscleCounts[b] ?? 0).compareTo(muscleCounts[a] ?? 0));
@@ -417,7 +706,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }
 
   Color _muscleColor(String group) {
-    const upper = ['Pecho', 'Espalda', 'Hombros'];
+    const upper = [
+      'Pecho',
+      'Espalda',
+      'Hombros',
+      'Bíceps',
+      'Tríceps',
+      'Antebrazo',
+    ];
     return upper.contains(group)
         ? GymOSTheme.orangeElectric
         : GymOSTheme.violetElectric;
@@ -457,6 +753,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
       0,
       (max, value) => value > max ? value : max,
     );
+    final volumeByMuscle = ProgressAnalytics.volumeByMuscle(history);
 
     return Scaffold(
       backgroundColor: GymOSTheme.bgMain,
@@ -688,6 +985,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 _buildMuscleProgress(muscleCounts, maxMuscleCount),
 
                 const SizedBox(height: 24),
+                _buildPerformanceAnalysis(history, volumeByMuscle),
+
+                const SizedBox(height: 24),
                 _buildRecentSessions(history),
               ],
             ),
@@ -837,6 +1137,83 @@ class _ProgressScreenState extends State<ProgressScreen> {
 // ==========================================
 // COMPONENTES AUXILIARES
 // ==========================================
+class _AnalysisMetric extends StatelessWidget {
+  const _AnalysisMetric({
+    required this.label,
+    required this.value,
+    required this.caption,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final String caption;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          color: GymOSTheme.textSecondary,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .8,
+        ),
+      ),
+      const SizedBox(height: 5),
+      Text(
+        value,
+        style: TextStyle(
+          color: color,
+          fontSize: 20,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        caption,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: GymOSTheme.textSecondary, fontSize: 10),
+      ),
+    ],
+  );
+}
+
+class _AnalysisAlert extends StatelessWidget {
+  const _AnalysisAlert({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, color: color, size: 17),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: GymOSTheme.textSecondary,
+            fontSize: 11,
+            height: 1.35,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 class _StatTile extends StatelessWidget {
   final String label;
   final String value;

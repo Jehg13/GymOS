@@ -270,12 +270,19 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       equipment: _equipamiento,
       days: _diasSeleccionados.toList(),
       muscles: _gruposMusculares.toList(),
+      age: _edad.toInt(),
+      weight: _peso,
+      height: _altura,
     );
     RoutineStore.instance.applyOnboardingPlan(
       goal: _objetivo,
       equipment: _equipamiento,
       days: _diasSeleccionados.toList(),
       muscles: _gruposMusculares.toList(),
+      experience: _experiencia,
+      age: _edad.toInt(),
+      weight: _peso,
+      height: _altura,
     );
     if (!mounted) return;
     widget.onFinished?.call();
@@ -514,7 +521,10 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           'Hombros',
           'Bíceps',
           'Tríceps',
+          'Glúteos',
           'Core',
+          'Antebrazo',
+          'Pantorrillas',
         ];
         return _buildStepLayout(
           title: 'Grupos prioritarios',

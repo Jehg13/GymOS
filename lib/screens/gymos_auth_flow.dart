@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/local_auth_service.dart';
+
 void main() {
   runApp(const GymOSApp());
 }
@@ -336,61 +338,65 @@ class GymOSInput extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 7),
-      TextField(
-        controller: controller,
-        onChanged: onChanged,
-        obscureText: obscureText ?? isPassword,
-        style: const TextStyle(
-          color: GymOSTheme.textPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            color: GymOSTheme.textSecondary.withValues(alpha: .55),
-            fontSize: 13,
+      Semantics(
+        label: label,
+        textField: true,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          obscureText: obscureText ?? isPassword,
+          style: const TextStyle(
+            color: GymOSTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(9),
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: GymOSTheme.cyan.withValues(alpha: .1),
-              borderRadius: BorderRadius.circular(8),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: GymOSTheme.textSecondary.withValues(alpha: .55),
+              fontSize: 13,
             ),
-            child: Icon(icon, color: GymOSTheme.cyan, size: 16),
-          ),
-          suffixIcon: isPassword
-              ? IconButton(
-                  onPressed: onToggleVisibility,
-                  icon: Icon(
-                    (obscureText ?? true)
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    color: GymOSTheme.textSecondary,
-                    size: 19,
-                  ),
-                )
-              : null,
-          filled: true,
-          fillColor: const Color(0xFF11141B),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 15,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide(color: Colors.white.withValues(alpha: .1)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide(color: Colors.white.withValues(alpha: .1)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(
-              color: GymOSTheme.orangeElectric,
-              width: 1.5,
+            prefixIcon: Container(
+              margin: const EdgeInsets.all(9),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: GymOSTheme.cyan.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: GymOSTheme.cyan, size: 16),
+            ),
+            suffixIcon: isPassword
+                ? IconButton(
+                    onPressed: onToggleVisibility,
+                    icon: Icon(
+                      (obscureText ?? true)
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: GymOSTheme.textSecondary,
+                      size: 19,
+                    ),
+                  )
+                : null,
+            filled: true,
+            fillColor: const Color(0xFF11141B),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 15,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: .1)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: .1)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: const BorderSide(
+                color: GymOSTheme.orangeElectric,
+                width: 1.5,
+              ),
             ),
           ),
         ),
@@ -535,13 +541,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              GymOSPrimaryButton(
-                text: 'Iniciar sesión',
-                onPressed: () => widget.onAuthenticated(context),
-              ),
+              GymOSPrimaryButton(text: 'Iniciar sesión', onPressed: _login),
               const Spacer(),
-              _socialButton(),
-              const SizedBox(height: 12),
               Center(
                 child: Wrap(
                   alignment: WrapAlignment.center,
@@ -579,27 +580,27 @@ class _LoginScreenState extends State<LoginScreen> {
     ),
   );
 
-  Widget _socialButton() => SizedBox(
-    width: double.infinity,
-    height: 48,
-    child: OutlinedButton.icon(
-      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Inicio con Google próximamente disponible'),
-        ),
-      ),
-      icon: const Icon(Icons.g_mobiledata_rounded, size: 25),
-      label: const Text(
-        'Continuar con Google',
-        style: TextStyle(fontWeight: FontWeight.w700),
-      ),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: BorderSide(color: Colors.white.withValues(alpha: .1)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-    ),
-  );
+  Future<void> _login() async {
+    final valid = _email.text.contains('@') && _password.text.length >= 8;
+    if (!valid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un email y contraseña válidos')),
+      );
+      return;
+    }
+    final authenticated = await LocalAuthService.instance.login(
+      email: _email.text,
+      password: _password.text,
+    );
+    if (!mounted) return;
+    if (!authenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email o contraseña incorrectos')),
+      );
+      return;
+    }
+    widget.onAuthenticated(context);
+  }
 }
 
 class RegisterScreen extends StatefulWidget {
@@ -764,7 +765,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  void _createAccount() {
+  Future<void> _createAccount() async {
     if (_name.text.trim().isEmpty ||
         !_email.text.contains('@') ||
         _password.text.length < 8 ||
@@ -775,6 +776,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
             'Revisa tus datos y confirma que las contraseñas coincidan',
           ),
         ),
+      );
+      return;
+    }
+    final created = await LocalAuthService.instance.register(
+      name: _name.text,
+      email: _email.text,
+      password: _password.text,
+    );
+    if (!mounted) return;
+    if (!created) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ya existe una cuenta con ese email')),
       );
       return;
     }
@@ -854,17 +867,28 @@ class _RecoverPasswordScreenState extends State<RecoverPasswordScreen> {
             const SizedBox(height: 18),
             GymOSPrimaryButton(
               text: 'Enviar código',
-              onPressed: () {
+              onPressed: () async {
                 if (!_email.text.contains('@')) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Ingresa un email válido')),
                   );
                   return;
                 }
+                final code = await LocalAuthService.instance
+                    .requestPasswordReset(_email.text);
+                if (!context.mounted) return;
+                if (code == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No existe una cuenta con ese email'),
+                    ),
+                  );
+                  return;
+                }
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const VerificationCodeScreen(),
+                    builder: (_) => VerificationCodeScreen(code: code),
                   ),
                 );
               },
@@ -877,7 +901,9 @@ class _RecoverPasswordScreenState extends State<RecoverPasswordScreen> {
 }
 
 class VerificationCodeScreen extends StatefulWidget {
-  const VerificationCodeScreen({super.key});
+  const VerificationCodeScreen({super.key, required this.code});
+
+  final String code;
 
   @override
   State<VerificationCodeScreen> createState() => _VerificationCodeScreenState();
@@ -885,10 +911,13 @@ class VerificationCodeScreen extends StatefulWidget {
 
 class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
   final _code = TextEditingController();
+  final _newPassword = TextEditingController();
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _code.dispose();
+    _newPassword.dispose();
     super.dispose();
   }
 
@@ -925,8 +954,28 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Introduce el código de 6 dígitos que enviamos a tu correo.',
+              'Como estás usando modo local, el código se genera en este dispositivo.',
               style: TextStyle(color: GymOSTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: GymOSTheme.orangeElectric.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: GymOSTheme.orangeElectric.withValues(alpha: .3),
+                ),
+              ),
+              child: Text(
+                'Tu código local: ${widget.code}',
+                style: const TextStyle(
+                  color: GymOSTheme.orangeElectric,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                ),
+              ),
             ),
             const SizedBox(height: 28),
             GymOSInput(
@@ -935,10 +984,21 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
               icon: Icons.password_rounded,
               controller: _code,
             ),
+            const SizedBox(height: 14),
+            GymOSInput(
+              label: 'Nueva contraseña',
+              hint: 'Mínimo 8 caracteres',
+              icon: Icons.lock_reset_rounded,
+              isPassword: true,
+              controller: _newPassword,
+              obscureText: _obscurePassword,
+              onToggleVisibility: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+            ),
             const SizedBox(height: 18),
             GymOSPrimaryButton(
               text: 'Verificar',
-              onPressed: () {
+              onPressed: () async {
                 if (_code.text.trim().length != 6) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -947,7 +1007,41 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
                   );
                   return;
                 }
-                Navigator.pop(context);
+                if (_newPassword.text.length < 8) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'La nueva contraseña debe tener 8 caracteres',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                final verified = LocalAuthService.instance.verifyResetCode(
+                  _code.text,
+                );
+                if (!verified) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('El código no es válido')),
+                  );
+                  return;
+                }
+                final reset = await LocalAuthService.instance.resetPassword(
+                  _newPassword.text,
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      reset
+                          ? 'Contraseña actualizada correctamente'
+                          : 'El código no es válido',
+                    ),
+                  ),
+                );
+                if (reset) {
+                  Navigator.popUntil(context, (route) => route.isFirst);
+                }
               },
             ),
           ],

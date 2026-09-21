@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../data/app_preferences.dart';
 import '../data/routine_store.dart';
@@ -26,6 +30,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _notifications = true;
   bool _privateProfile = false;
   bool _ready = false;
+  int _age = 25;
+  double _weight = 75;
+  double _height = 175;
+  String _equipment = 'Gimnasio completo';
+  List<String> _trainingDays = const ['Lun', 'Mié', 'Vie'];
+  List<String> _focusMuscles = const ['Pecho', 'Espalda', 'Piernas'];
+  Uint8List? _profileImage;
 
   @override
   void initState() {
@@ -41,6 +52,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _goal = AppPreferences.instance.profileGoal;
       _experience = AppPreferences.instance.profileExperience;
       _unit = AppPreferences.instance.profileUnit;
+      _age = AppPreferences.instance.profileAge;
+      _weight = AppPreferences.instance.profileWeight;
+      _height = AppPreferences.instance.profileHeight;
+      _equipment = AppPreferences.instance.profileEquipment;
+      _trainingDays = List<String>.from(AppPreferences.instance.trainingDays);
+      _focusMuscles = List<String>.from(AppPreferences.instance.focusMuscles);
+      final image = AppPreferences.instance.profileImage;
+      _profileImage = image == null ? null : base64Decode(image);
       _ready = true;
     });
   }
@@ -152,28 +171,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ),
     child: Row(
       children: [
-        Container(
-          width: 66,
-          height: 66,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF7A1A), Color(0xFFFFB347)],
-            ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .8),
-              width: 2,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              _name.isEmpty ? '?' : _name[0].toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF08090C),
-                fontSize: 27,
-                fontWeight: FontWeight.w900,
+        GestureDetector(
+          onTap: _pickProfilePhoto,
+          child: Container(
+            width: 66,
+            height: 66,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF7A1A), Color(0xFFFFB347)],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: .8),
+                width: 2,
               ),
             ),
+            child: _profileImage == null
+                ? Center(
+                    child: Text(
+                      _name.isEmpty ? '?' : _name[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Color(0xFF08090C),
+                        fontSize: 27,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  )
+                : ClipOval(
+                    child: Image.memory(_profileImage!, fit: BoxFit.cover),
+                  ),
           ),
         ),
         const SizedBox(width: 14),
@@ -326,6 +352,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _unit == 'Métrico' ? 'Kilogramos y centímetros' : 'Libras y pulgadas',
           const Color(0xFF39D9FF),
         ),
+        const Divider(color: Color(0xFF252B36), height: 22),
+        _infoRow(
+          Icons.cake_outlined,
+          'Edad',
+          '$_age años',
+          const Color(0xFFFFB347),
+        ),
+        const Divider(color: Color(0xFF252B36), height: 22),
+        _infoRow(
+          Icons.monitor_weight_outlined,
+          'Peso / altura',
+          '${_weight.toStringAsFixed(1)} kg · ${_height.toStringAsFixed(0)} cm',
+          const Color(0xFF39D9FF),
+        ),
+        const Divider(color: Color(0xFF252B36), height: 22),
+        _infoRow(
+          Icons.fitness_center_rounded,
+          'Equipamiento',
+          _equipment,
+          const Color(0xFF9B7CFF),
+        ),
+        const Divider(color: Color(0xFF252B36), height: 22),
+        _infoRow(
+          Icons.event_available_rounded,
+          'Días',
+          _trainingDays.join(' · '),
+          const Color(0xFFFF7A1A),
+        ),
       ],
     ),
   );
@@ -393,8 +447,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _actionTile(
           Icons.download_rounded,
           'Exportar datos',
-          'Crear un resumen de GymOS',
+          'Copiar una copia JSON completa',
           _exportData,
+        ),
+        _divider(),
+        _actionTile(
+          Icons.upload_file_rounded,
+          'Importar copia',
+          'Restaurar datos desde JSON',
+          _importData,
+        ),
+        _divider(),
+        _actionTile(
+          Icons.restart_alt_rounded,
+          'Reiniciar plan generado',
+          'Eliminar rutinas para generar un plan nuevo',
+          _resetPlan,
+          color: const Color(0xFFFFB347),
         ),
         _divider(),
         _actionTile(
@@ -402,6 +471,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'Datos locales',
           'Rutinas e historial almacenados en este dispositivo',
           _showLocalData,
+        ),
+        _divider(),
+        _actionTile(
+          Icons.delete_forever_rounded,
+          'Eliminar todos los datos',
+          'Borrado local permanente y controlado',
+          _deleteAllData,
+          color: const Color(0xFFFF6B6B),
         ),
         if (widget.onLogout != null) ...[
           _divider(),
@@ -541,8 +618,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _editProfile() async {
     final name = TextEditingController(text: _name);
+    final age = TextEditingController(text: '$_age');
+    final weight = TextEditingController(text: '$_weight');
+    final height = TextEditingController(text: '$_height');
     var goal = _goal;
     var experience = _experience;
+    var equipment = _equipment;
+    var days = List<String>.from(_trainingDays);
+    var muscles = List<String>.from(_focusMuscles);
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -585,6 +668,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 18),
                 _profileField(name, 'Nombre', Icons.person_outline_rounded),
                 const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _profileField(age, 'Edad', Icons.cake_outlined),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _profileField(
+                        weight,
+                        'Peso kg',
+                        Icons.monitor_weight_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _profileField(
+                        height,
+                        'Altura cm',
+                        Icons.height_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 _dropdown('Objetivo', goal, [
                   'Ganar músculo',
                   'Perder grasa',
@@ -597,6 +704,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   experience,
                   ['Principiante', 'Intermedio', 'Avanzado'],
                   (value) => setSheetState(() => experience = value!),
+                ),
+                const SizedBox(height: 12),
+                _dropdown(
+                  'Equipamiento',
+                  equipment,
+                  const [
+                    'Gimnasio completo',
+                    'Mancuernas',
+                    'Peso corporal',
+                    'Bandas',
+                  ],
+                  (value) => setSheetState(() => equipment = value!),
+                ),
+                const SizedBox(height: 14),
+                _selectionWrap(
+                  'Días de entrenamiento',
+                  const ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                  days,
+                  (value) => setSheetState(
+                    () => days.contains(value)
+                        ? days.remove(value)
+                        : days.add(value),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _selectionWrap(
+                  'Grupos musculares',
+                  const [
+                    'Pecho',
+                    'Espalda',
+                    'Piernas',
+                    'Hombros',
+                    'Brazos',
+                    'Core',
+                    'Glúteos',
+                    'Antebrazo',
+                    'Pantorrillas',
+                  ],
+                  muscles,
+                  (value) => setSheetState(
+                    () => muscles.contains(value)
+                        ? muscles.remove(value)
+                        : muscles.add(value),
+                  ),
                 ),
                 const SizedBox(height: 22),
                 SizedBox(
@@ -625,16 +776,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _name = name.text.trim().isEmpty ? _name : name.text.trim();
         _goal = goal;
         _experience = experience;
+        _age = int.tryParse(age.text) ?? _age;
+        _weight = double.tryParse(weight.text) ?? _weight;
+        _height = double.tryParse(height.text) ?? _height;
+        _equipment = equipment;
+        _trainingDays = days;
+        _focusMuscles = muscles;
       });
       await AppPreferences.instance.saveProfile(
         name: _name,
         goal: _goal,
         experience: _experience,
         unit: _unit,
+        equipment: _equipment,
+        days: _trainingDays,
+        muscles: _focusMuscles,
+        age: _age,
+        weight: _weight,
+        height: _height,
       );
     }
     name.dispose();
+    age.dispose();
+    weight.dispose();
+    height.dispose();
   }
+
+  Widget _selectionWrap(
+    String label,
+    List<String> options,
+    List<String> selected,
+    ValueChanged<String> onTap,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(color: Color(0xFF9B9FA8), fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: options
+            .map(
+              (value) => FilterChip(
+                label: Text(value),
+                selected: selected.contains(value),
+                onSelected: (_) => onTap(value),
+                selectedColor: const Color(0xFFFF7A1A).withValues(alpha: .25),
+                labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            )
+            .toList(),
+      ),
+    ],
+  );
 
   Widget _profileField(
     TextEditingController controller,
@@ -717,9 +914,160 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _exportData() => _message(
-    'Resumen preparado. La exportación estará disponible al conectar almacenamiento externo.',
-  );
+  Future<void> _pickProfilePhoto() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    await AppPreferences.instance.saveProfileImage(base64Encode(bytes));
+    if (mounted) setState(() => _profileImage = bytes);
+  }
+
+  Future<void> _exportData() async {
+    final payload = {
+      'version': 1,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'profile': {
+        'name': _name,
+        'goal': _goal,
+        'experience': _experience,
+        'unit': _unit,
+        'equipment': _equipment,
+        'days': _trainingDays,
+        'muscles': _focusMuscles,
+        'age': _age,
+        'weight': _weight,
+        'height': _height,
+      },
+      'routines': RoutineStore.instance.routines,
+      'workouts': RoutineStore.instance.workoutHistory,
+      'bodyLogs': RoutineStore.instance.bodyLogs,
+      'goals': RoutineStore.instance.goals,
+      'favorites': RoutineStore.instance.favoriteExercises.toList(),
+      'exerciseHistory': RoutineStore.instance.exerciseHistory,
+    };
+    await Clipboard.setData(ClipboardData(text: jsonEncode(payload)));
+    _message('Copia JSON preparada y copiada al portapapeles.');
+  }
+
+  Future<void> _importData() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF151820),
+        title: const Text('Importar copia JSON'),
+        content: TextField(
+          controller: controller,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            hintText: 'Pega aquí el JSON exportado',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('RESTAURAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final decoded = jsonDecode(controller.text) as Map<String, dynamic>;
+      final profile = Map<String, dynamic>.from(decoded['profile'] as Map);
+      await RoutineStore.instance.clearAllData();
+      await AppPreferences.instance.saveProfile(
+        name: profile['name']?.toString() ?? _name,
+        goal: profile['goal']?.toString() ?? _goal,
+        experience: profile['experience']?.toString() ?? _experience,
+        unit: profile['unit']?.toString() ?? _unit,
+        equipment: profile['equipment']?.toString(),
+        days: List<String>.from(profile['days'] as List? ?? _trainingDays),
+        muscles: List<String>.from(
+          profile['muscles'] as List? ?? _focusMuscles,
+        ),
+        age: (profile['age'] as num?)?.toInt(),
+        weight: (profile['weight'] as num?)?.toDouble(),
+        height: (profile['height'] as num?)?.toDouble(),
+      );
+      final store = RoutineStore.instance;
+      for (final item in (decoded['routines'] as List? ?? const [])) {
+        await store.add(Map<String, dynamic>.from(item as Map));
+      }
+      for (final item in (decoded['workouts'] as List? ?? const [])) {
+        await store.addWorkoutHistory(Map<String, dynamic>.from(item as Map));
+      }
+      for (final item in (decoded['bodyLogs'] as List? ?? const [])) {
+        await store.addBodyLog(Map<String, dynamic>.from(item as Map));
+      }
+      for (final item in (decoded['goals'] as List? ?? const [])) {
+        await store.addGoal(Map<String, dynamic>.from(item as Map));
+      }
+      for (final name in (decoded['favorites'] as List? ?? const [])) {
+        await store.toggleFavorite(name.toString());
+      }
+      for (final name in (decoded['exerciseHistory'] as List? ?? const [])) {
+        await store.recordExerciseUse(name.toString());
+      }
+      await _loadProfile();
+      _message('Copia restaurada correctamente.');
+    } catch (_) {
+      _message('La copia no es válida o está incompleta.');
+    }
+  }
+
+  Future<void> _resetPlan() async {
+    await RoutineStore.instance.resetGeneratedPlan();
+    _message(
+      'Plan reiniciado. Puedes generar uno nuevo desde tus preferencias.',
+    );
+  }
+
+  Future<void> _deleteAllData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF151820),
+        title: const Text('Eliminar todos los datos'),
+        content: const Text(
+          'Se borrarán rutinas, historial, objetivos, fotos y preferencias. Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B6B),
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ELIMINAR TODO'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await RoutineStore.instance.clearAllData();
+    await AppPreferences.instance.clear();
+    if (!mounted) return;
+    setState(() {
+      _profileImage = null;
+      _name = 'Jesús';
+      _age = 25;
+      _weight = 75;
+      _height = 175;
+    });
+    _message('Todos los datos locales fueron eliminados.');
+  }
+
   void _showLocalData() => _message(
     '${RoutineStore.instance.routines.length} rutinas y ${RoutineStore.instance.workoutHistory.length} sesiones guardadas localmente.',
   );

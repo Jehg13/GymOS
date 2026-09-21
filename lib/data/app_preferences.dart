@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 
@@ -14,9 +16,13 @@ class AppPreferences {
   Future<void> initialize() async {
     if (_preferences != null) return;
     try {
-      _preferences = await SharedPreferences.getInstance();
+      _preferences = await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 2),
+      );
     } on MissingPluginException {
       // Allows an old Web hot-reload bundle to start before plugins refresh.
+    } on TimeoutException {
+      // Continue with the in-memory fallback when local storage is unavailable.
     }
   }
 
@@ -30,6 +36,9 @@ class AppPreferences {
       _fallback['session_active'] ??
       false;
 
+  String? get currentUserEmail =>
+      _preferences?.getString('auth_email') ?? _textFallback['auth_email'];
+
   Future<void> completeOnboarding() async {
     await _setBool('onboarding_completed', true);
   }
@@ -40,12 +49,23 @@ class AppPreferences {
 
   Future<void> closeSession() async {
     await _setBool('session_active', false);
+    _textFallback.remove('auth_email');
+    await _preferences?.remove('auth_email');
+  }
+
+  Future<void> saveAuthenticatedUser(String email, String name) async {
+    await _setText('auth_email', email);
+    await _setText('profile_name', name);
   }
 
   String get profileName =>
       _preferences?.getString('profile_name') ??
       _textFallback['profile_name'] ??
       'Jesús';
+
+  String? get profileImage =>
+      _preferences?.getString('profile_image') ??
+      _textFallback['profile_image'];
 
   String get profileGoal =>
       _preferences?.getString('profile_goal') ??
@@ -77,6 +97,30 @@ class AppPreferences {
       _listFallback['focus_muscles'] ??
       const ['Pecho', 'Espalda', 'Piernas'];
 
+  int get profileAge =>
+      int.tryParse(
+        _preferences?.getString('profile_age') ??
+            _textFallback['profile_age'] ??
+            '25',
+      ) ??
+      25;
+
+  double get profileWeight =>
+      double.tryParse(
+        _preferences?.getString('profile_weight') ??
+            _textFallback['profile_weight'] ??
+            '75',
+      ) ??
+      75;
+
+  double get profileHeight =>
+      double.tryParse(
+        _preferences?.getString('profile_height') ??
+            _textFallback['profile_height'] ??
+            '175',
+      ) ??
+      175;
+
   Future<void> saveProfile({
     required String name,
     required String goal,
@@ -85,6 +129,9 @@ class AppPreferences {
     String? equipment,
     List<String>? days,
     List<String>? muscles,
+    int? age,
+    double? weight,
+    double? height,
   }) async {
     await _setText('profile_name', name);
     await _setText('profile_goal', goal);
@@ -93,6 +140,18 @@ class AppPreferences {
     if (equipment != null) await _setText('profile_equipment', equipment);
     if (days != null) await _setList('training_days', days);
     if (muscles != null) await _setList('focus_muscles', muscles);
+    if (age != null) await _setText('profile_age', '$age');
+    if (weight != null) await _setText('profile_weight', '$weight');
+    if (height != null) await _setText('profile_height', '$height');
+  }
+
+  Future<void> saveProfileImage(String? base64Image) async {
+    if (base64Image == null) {
+      _textFallback.remove('profile_image');
+      await _preferences?.remove('profile_image');
+    } else {
+      await _setText('profile_image', base64Image);
+    }
   }
 
   Future<void> _setBool(String key, bool value) async {

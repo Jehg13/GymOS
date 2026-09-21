@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../data/exercise_catalog.dart';
+import '../data/exercise_details.dart';
+import '../data/routine_store.dart';
+
 void main() {
   runApp(const GymOSApp());
 }
@@ -48,14 +52,21 @@ class ExerciseLibraryScreen extends StatefulWidget {
 
 class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
   String _selectedCategory = 'Pecho';
+  String _search = '';
+  String _selectedEquipment = 'Todos';
+  String _selectedDifficulty = 'Todos';
+  bool _favoritesOnly = false;
   final List<String> _categories = [
     'Pecho',
     'Espalda',
     'Piernas',
+    'Glúteos',
     'Hombros',
     'Bíceps',
     'Tríceps',
     'Core',
+    'Antebrazo',
+    'Pantorrillas',
   ];
   final List<String> _filters = [
     'Músculo',
@@ -98,7 +109,8 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
                     color: Colors.white.withValues(alpha: 0.04),
                   ),
                 ),
-                child: const TextField(
+                child: TextField(
+                  onChanged: (value) => setState(() => _search = value.trim()),
                   style: TextStyle(color: GymOSTheme.textPrimary, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Buscar ejercicio...',
@@ -126,36 +138,49 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
                 children: _filters.map((filter) {
-                  return Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: GymOSTheme.surfaceElevated,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.04),
+                  final active = switch (filter) {
+                    'Equipo' => _selectedEquipment != 'Todos',
+                    'Dificultad' => _selectedDifficulty != 'Todos',
+                    'Favoritos' => _favoritesOnly,
+                    _ => false,
+                  };
+                  return GestureDetector(
+                    onTap: () => _openFilter(filter),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          filter,
-                          style: const TextStyle(
-                            color: GymOSTheme.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? GymOSTheme.orangeElectric.withValues(alpha: .16)
+                            : GymOSTheme.surfaceElevated,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.04),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            filter,
+                            style: TextStyle(
+                              color: active
+                                  ? GymOSTheme.orangeElectric
+                                  : GymOSTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 14,
-                          color: GymOSTheme.textSecondary,
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 14,
+                            color: GymOSTheme.textSecondary,
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }).toList(),
@@ -206,35 +231,38 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
 
             // Lista de Ejercicios
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  _buildExerciseTile(
-                    context,
-                    name: 'Press Banca',
-                    primaryMuscle: 'Pecho',
-                    equipment: 'Barra',
-                  ),
-                  _buildExerciseTile(
-                    context,
-                    name: 'Press Inclinado con Mancuernas',
-                    primaryMuscle: 'Pecho',
-                    equipment: 'Mancuernas',
-                  ),
-                  _buildExerciseTile(
-                    context,
-                    name: 'Aperturas en Polea',
-                    primaryMuscle: 'Pecho',
-                    equipment: 'Polea',
-                  ),
-                  _buildExerciseTile(
-                    context,
-                    name: 'Fondos en Paralelas',
-                    primaryMuscle: 'Pecho',
-                    equipment: 'Peso Corporal',
-                  ),
-                ],
+              child: AnimatedBuilder(
+                animation: RoutineStore.instance,
+                builder: (context, _) => ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  physics: const BouncingScrollPhysics(),
+                  children: _filteredExercises.isEmpty
+                      ? [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 48),
+                            child: Center(
+                              child: Text(
+                                'No encontramos ejercicios con esos filtros.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: GymOSTheme.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ]
+                      : _filteredExercises
+                            .map(
+                              (exercise) => _buildExerciseTile(
+                                context,
+                                name: exercise['name']!,
+                                primaryMuscle: exercise['muscle']!,
+                                equipment: exercise['equipment']!,
+                                difficulty: exercise['difficulty']!,
+                              ),
+                            )
+                            .toList(),
+                ),
               ),
             ),
           ],
@@ -243,11 +271,80 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
     );
   }
 
+  List<Map<String, String>> get _filteredExercises {
+    final query = _search.toLowerCase();
+    return ExerciseCatalog.all.where((exercise) {
+      final matchesCategory = exercise['muscle'] == _selectedCategory;
+      final matchesEquipment =
+          _selectedEquipment == 'Todos' ||
+          exercise['equipment'] == _selectedEquipment;
+      final matchesDifficulty =
+          _selectedDifficulty == 'Todos' ||
+          exercise['difficulty'] == _selectedDifficulty;
+      final matchesFavorite =
+          !_favoritesOnly ||
+          RoutineStore.instance.favoriteExercises.contains(exercise['name']);
+      final matchesSearch =
+          query.isEmpty ||
+          exercise.values.any((value) => value.toLowerCase().contains(query));
+      return matchesCategory &&
+          matchesEquipment &&
+          matchesDifficulty &&
+          matchesFavorite &&
+          matchesSearch;
+    }).toList();
+  }
+
+  Future<void> _openFilter(String filter) async {
+    if (filter == 'Favoritos') {
+      setState(() => _favoritesOnly = !_favoritesOnly);
+      return;
+    }
+    final options = filter == 'Equipo'
+        ? ['Todos', 'Barra', 'Mancuernas', 'Polea', 'Máquina', 'Peso corporal']
+        : ['Todos', 'Principiante', 'Intermedio', 'Avanzado'];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: GymOSTheme.surfaceElevated,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: options
+              .map(
+                (option) => ListTile(
+                  title: Text(option),
+                  trailing: Icon(
+                    (filter == 'Equipo'
+                                ? _selectedEquipment
+                                : _selectedDifficulty) ==
+                            option
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    color: GymOSTheme.orangeElectric,
+                  ),
+                  onTap: () => Navigator.pop(context, option),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      if (filter == 'Equipo') {
+        _selectedEquipment = selected;
+      } else {
+        _selectedDifficulty = selected;
+      }
+    });
+  }
+
   Widget _buildExerciseTile(
     BuildContext context, {
     required String name,
     required String primaryMuscle,
     required String equipment,
+    required String difficulty,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -264,9 +361,14 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const ExerciseDetailScreen(),
+                builder: (context) => ExerciseDetailScreen(
+                  exercise: ExerciseCatalog.all.firstWhere(
+                    (item) => item['name'] == name,
+                  ),
+                ),
               ),
             );
+            RoutineStore.instance.recordExerciseUse(name);
           },
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -290,14 +392,33 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
                         _MetaBadge(label: primaryMuscle, isPrimary: true),
                         const SizedBox(width: 6),
                         _MetaBadge(label: equipment, isPrimary: false),
+                        const SizedBox(width: 6),
+                        _MetaBadge(label: difficulty, isPrimary: false),
                       ],
                     ),
                   ],
                 ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: GymOSTheme.textSecondary,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Favorito',
+                      onPressed: () =>
+                          RoutineStore.instance.toggleFavorite(name),
+                      icon: Icon(
+                        RoutineStore.instance.favoriteExercises.contains(name)
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        size: 20,
+                        color: GymOSTheme.orangeElectric,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: GymOSTheme.textSecondary,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -312,10 +433,16 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
 // PANTALLA DETALLE: PRESS BANCA
 // ==========================================
 class ExerciseDetailScreen extends StatelessWidget {
-  const ExerciseDetailScreen({super.key});
+  const ExerciseDetailScreen({super.key, required this.exercise});
+
+  final Map<String, String> exercise;
 
   @override
   Widget build(BuildContext context) {
+    final details = ExerciseDetails.forExercise(exercise);
+    final isFavorite = RoutineStore.instance.favoriteExercises.contains(
+      exercise['name'],
+    );
     return Scaffold(
       backgroundColor: GymOSTheme.bgMain,
       appBar: AppBar(
@@ -331,15 +458,22 @@ class ExerciseDetailScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.star_border_rounded,
+            icon: Icon(
+              isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
               color: GymOSTheme.orangeElectric,
               size: 22,
             ),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ejercicio añadido a favoritos')),
+                SnackBar(
+                  content: Text(
+                    isFavorite
+                        ? 'Ejercicio eliminado de favoritos'
+                        : 'Ejercicio añadido a favoritos',
+                  ),
+                ),
               );
+              RoutineStore.instance.toggleFavorite(exercise['name']!);
             },
           ),
         ],
@@ -379,8 +513,8 @@ class ExerciseDetailScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  'ILUSTRACIÓN ANATÓMICA',
+                                Text(
+                                  '${exercise['muscle']!.toUpperCase()} · ANATOMÍA',
                                   style: TextStyle(
                                     color: GymOSTheme.textSecondary,
                                     fontSize: 9,
@@ -404,7 +538,7 @@ class ExerciseDetailScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
-                                '3D ANATOMY',
+                                'MOVIMIENTO',
                                 style: TextStyle(
                                   color: GymOSTheme.orangeElectric,
                                   fontSize: 8,
@@ -420,8 +554,8 @@ class ExerciseDetailScreen extends StatelessWidget {
                     const SizedBox(height: 20),
 
                     // TÍTULO Y MAPA MUSCULAR
-                    const Text(
-                      'PRESS BANCA',
+                    Text(
+                      exercise['name']!.toUpperCase(),
                       style: TextStyle(
                         color: GymOSTheme.textPrimary,
                         fontSize: 24,
@@ -446,7 +580,7 @@ class ExerciseDetailScreen extends StatelessWidget {
                         children: [
                           _DetailRow(
                             label: 'Músculo Principal',
-                            value: 'Pecho',
+                            value: exercise['muscle']!,
                             isHighlight: true,
                           ),
                           const Divider(
@@ -455,13 +589,24 @@ class ExerciseDetailScreen extends StatelessWidget {
                           ),
                           _DetailRow(
                             label: 'Secundarios',
-                            value: 'Tríceps, Deltoides anterior',
+                            value: details['secondary'] as String,
                           ),
                           const Divider(
                             height: 20,
                             color: GymOSTheme.surfaceElevated,
                           ),
-                          _DetailRow(label: 'Equipo', value: 'Barra'),
+                          _DetailRow(
+                            label: 'Equipo',
+                            value: exercise['equipment']!,
+                          ),
+                          const Divider(
+                            height: 20,
+                            color: GymOSTheme.surfaceElevated,
+                          ),
+                          _DetailRow(
+                            label: 'Dificultad',
+                            value: exercise['difficulty']!,
+                          ),
                         ],
                       ),
                     ),
@@ -547,6 +692,91 @@ class ExerciseDetailScreen extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 20),
+                    _detailSection(
+                      title: 'TÉCNICA Y EJECUCIÓN',
+                      child: Text(
+                        details['description'] as String,
+                        style: const TextStyle(
+                          color: GymOSTheme.textSecondary,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _detailSection(
+                      title: 'ERRORES FRECUENTES',
+                      child: Column(
+                        children: (details['errors'] as List<String>)
+                            .map(
+                              (error) => Padding(
+                                padding: const EdgeInsets.only(bottom: 9),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: Color(0xFFFFB347),
+                                      size: 17,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        error,
+                                        style: const TextStyle(
+                                          color: GymOSTheme.textSecondary,
+                                          fontSize: 12,
+                                          height: 1.35,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _detailSection(
+                      title: 'VARIACIONES Y SUSTITUCIONES',
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: (details['variations'] as List<String>)
+                            .map(
+                              (item) =>
+                                  _MetaBadge(label: item, isPrimary: false),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _detailSection(
+                      title: 'RECOMENDACIÓN',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            color: const Color(0xFF39D9FF),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${details['tip']} Tempo sugerido: ${details['tempo']}.',
+                              style: const TextStyle(
+                                color: GymOSTheme.textSecondary,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -590,6 +820,34 @@ class ExerciseDetailScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _detailSection({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: GymOSTheme.surfaceBase,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: .04)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: GymOSTheme.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
